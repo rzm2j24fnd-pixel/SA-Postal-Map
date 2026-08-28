@@ -2,85 +2,663 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>NCRP — Carte</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes,viewport-fit=cover">
+
+<title>MRP — POSTAL MAP</title>
+
 <style>
-  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;font-family:Arial,sans-serif}
-  #map{display:block;width:100vw;height:100vh;touch-action:none;background:#fff}
-  #ui{position:fixed;right:12px;top:12px;display:flex;gap:8px;z-index:2}
-  button{width:44px;height:44px;border:0;border-radius:10px;background:rgba(20,20,20,.82);color:#fff;font-size:22px;box-shadow:0 2px 8px #0005}
-  #hint{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);background:#111c;color:#fff;padding:7px 11px;border-radius:9px;font-size:12px;z-index:2;pointer-events:none}
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #111;
+    font-family: Arial, sans-serif;
+  }
+
+  #map {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    touch-action: none;
+    background: #fff;
+  }
+
+  #ui {
+    position: fixed;
+    right: 12px;
+    top: 12px;
+    display: flex;
+    gap: 8px;
+    z-index: 2;
+  }
+
+  button {
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 10px;
+    background: rgba(20, 20, 20, .82);
+    color: #fff;
+    font-size: 22px;
+    box-shadow: 0 2px 8px #0005;
+  }
+
+  #hint {
+    position: fixed;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    background: #111c;
+    color: #fff;
+    padding: 7px 11px;
+    border-radius: 9px;
+    font-size: 12px;
+    z-index: 2;
+    pointer-events: none;
+    white-space: nowrap;
+  }
 </style>
 </head>
+
 <body>
+
 <canvas id="map"></canvas>
+
 <div id="ui">
-  <button id="minus">−</button><button id="plus">+</button><button id="reset">↺</button><button id="full">⛶</button>
+  <button id="minus">−</button>
+  <button id="plus">+</button>
+  <button id="reset">↺</button>
+  <button id="full">⛶</button>
 </div>
-<div id="hint">Glisse pour déplacer • pince pour zoomer</div>
+
+<div id="hint">
+  Glisse pour déplacer • pince pour zoomer
+</div>
+
 <script>
-const canvas=document.getElementById('map'),ctx=canvas.getContext('2d');
-const img=new Image();
-img.src='https://s3.amazonaws.com/appforest_uf/f1496805493887x310323889600113000/Dispatch_Map_2.1.1.png';
 
-let dpr=window.devicePixelRatio||1, scale=1, x=0, y=0;
-let lastDist=null, dragging=false, lx=0, ly=0;
+const canvas = document.getElementById('map');
+const ctx = canvas.getContext('2d');
 
-function resize(){
-  dpr=window.devicePixelRatio||1;
-  canvas.width=innerWidth*dpr; canvas.height=innerHeight*dpr;
-  canvas.style.width=innerWidth+'px'; canvas.style.height=innerHeight+'px';
+
+// =====================================================
+// CARTE — même image que la version qui fonctionnait
+// =====================================================
+
+const img = new Image();
+
+img.src =
+  'https://s3.amazonaws.com/appforest_uf/f1496805493887x310323889600113000/Dispatch_Map_2.1.1.png';
+
+
+// =====================================================
+// VARIABLES
+// =====================================================
+
+let dpr = window.devicePixelRatio || 1;
+
+let scale = 1;
+
+let x = 0;
+let y = 0;
+
+
+// Gestion des doigts / souris
+let pointers = new Map();
+
+let dragStart = null;
+
+let pinchStart = null;
+
+
+// =====================================================
+// REDIMENSIONNEMENT
+// =====================================================
+
+function resize() {
+
+  dpr = window.devicePixelRatio || 1;
+
+  canvas.width = innerWidth * dpr;
+  canvas.height = innerHeight * dpr;
+
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+
   draw();
 }
-function draw(){
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.clearRect(0,0,innerWidth,innerHeight);
+
+
+// =====================================================
+// AFFICHAGE DE LA CARTE
+// =====================================================
+
+function draw() {
+
+  ctx.setTransform(
+    dpr,
+    0,
+    0,
+    dpr,
+    0,
+    0
+  );
+
+  ctx.clearRect(
+    0,
+    0,
+    innerWidth,
+    innerHeight
+  );
+
+  if (!img.complete || !img.naturalWidth) {
+    return;
+  }
+
   ctx.save();
-  ctx.translate(x,y);
-  ctx.scale(scale,scale);
-  ctx.drawImage(img,-1500,-4000);
+
+  // Position de la carte
+  ctx.translate(x, y);
+
+  // Zoom
+  ctx.scale(scale, scale);
+
+  // Position originale de la carte
+  ctx.drawImage(
+    img,
+    -1500,
+    -4000
+  );
+
   ctx.restore();
 }
-function zoomAt(f,cx=innerWidth/2,cy=innerHeight/2){
-  const wx=(cx-x)/scale, wy=(cy-y)/scale;
-  scale=Math.max(.25,Math.min(5,scale*f));
-  x=cx-wx*scale; y=cy-wy*scale; draw();
+
+
+// =====================================================
+// ZOOM AUTOUR D'UN POINT
+// =====================================================
+
+function zoomAt(
+  factor,
+  cx = innerWidth / 2,
+  cy = innerHeight / 2
+) {
+
+  // Coordonnées de la carte sous le curseur/doigt
+  const worldX =
+    (cx - x) / scale;
+
+  const worldY =
+    (cy - y) / scale;
+
+
+  // Nouveau zoom
+  scale =
+    Math.max(
+      0.25,
+      Math.min(
+        5,
+        scale * factor
+      )
+    );
+
+
+  // Garde le point sous le doigt
+  x =
+    cx -
+    worldX * scale;
+
+  y =
+    cy -
+    worldY * scale;
+
+
+  draw();
 }
-function reset(){scale=1;x=0;y=0;draw()}
 
-canvas.addEventListener('pointerdown',e=>{
-  canvas.setPointerCapture(e.pointerId); dragging=true; lx=e.clientX; ly=e.clientY;
-});
-canvas.addEventListener('pointermove',e=>{
-  if(!dragging||e.pointerType==='touch'&&canvas.getPointerCapture()==null)return;
-  x+=e.clientX-lx; y+=e.clientY-ly; lx=e.clientX; ly=e.clientY; draw();
-});
-canvas.addEventListener('pointerup',()=>dragging=false);
-canvas.addEventListener('wheel',e=>{e.preventDefault();zoomAt(e.deltaY<0?1.12:.89,e.clientX,e.clientY)},{passive:false});
 
-canvas.addEventListener('touchstart',e=>{
-  if(e.touches.length===2){
-    dragging=false;
-    lastDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-  }
-},{passive:false});
-canvas.addEventListener('touchmove',e=>{
-  if(e.touches.length===2){
+// =====================================================
+// RESET
+// =====================================================
+
+function reset() {
+
+  scale = 1;
+
+  x = 0;
+  y = 0;
+
+  draw();
+}
+
+
+// =====================================================
+// OUTILS POUR LE TOUCH
+// =====================================================
+
+function getDistance(a, b) {
+
+  return Math.hypot(
+    a.clientX - b.clientX,
+    a.clientY - b.clientY
+  );
+}
+
+
+function getCenter(a, b) {
+
+  return {
+
+    x:
+      (a.clientX + b.clientX) / 2,
+
+    y:
+      (a.clientY + b.clientY) / 2
+
+  };
+}
+
+
+// =====================================================
+// APPUI
+// =====================================================
+
+canvas.addEventListener(
+  'pointerdown',
+  function(e) {
+
     e.preventDefault();
-    const a=e.touches[0],b=e.touches[1];
-    const dist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
-    if(lastDist){zoomAt(dist/lastDist,(a.clientX+b.clientX)/2,(a.clientY+b.clientY)/2)}
-    lastDist=dist;
-  }
-},{passive:false});
-canvas.addEventListener('touchend',()=>lastDist=null);
 
-document.getElementById('plus').onclick=()=>zoomAt(1.2);
-document.getElementById('minus').onclick=()=>zoomAt(.833333);
-document.getElementById('reset').onclick=reset;
-document.getElementById('full').onclick=()=>document.documentElement.requestFullscreen?.();
-img.onload=draw; addEventListener('resize',resize); resize();
-setTimeout(()=>document.getElementById('hint').style.display='none',5000);
+    canvas.setPointerCapture(
+      e.pointerId
+    );
+
+
+    // Enregistre le doigt / curseur
+    pointers.set(
+      e.pointerId,
+      {
+        x: e.clientX,
+        y: e.clientY
+      }
+    );
+
+
+    // -------------------------------------------------
+    // UN DOIGT
+    // -------------------------------------------------
+
+    if (pointers.size === 1) {
+
+      dragStart = {
+
+        x: e.clientX,
+        y: e.clientY
+
+      };
+
+      pinchStart = null;
+    }
+
+
+    // -------------------------------------------------
+    // DEUX DOIGTS
+    // -------------------------------------------------
+
+    if (pointers.size === 2) {
+
+      const [
+        a,
+        b
+      ] =
+        [...pointers.values()];
+
+
+      const center =
+        getCenter(a, b);
+
+
+      pinchStart = {
+
+        // Distance initiale entre les doigts
+        distance:
+          getDistance(a, b),
+
+        // Zoom initial
+        scale:
+          scale,
+
+        // Centre du geste
+        centerX:
+          center.x,
+
+        centerY:
+          center.y,
+
+        // Position de la carte sous le centre
+        worldX:
+          (center.x - x) / scale,
+
+        worldY:
+          (center.y - y) / scale
+
+      };
+
+
+      // On arrête le déplacement simple
+      dragStart = null;
+    }
+
+  },
+  {
+    passive: false
+  }
+);
+
+
+// =====================================================
+// MOUVEMENT
+// =====================================================
+
+canvas.addEventListener(
+  'pointermove',
+  function(e) {
+
+    if (!pointers.has(e.pointerId)) {
+      return;
+    }
+
+    e.preventDefault();
+
+
+    // Mise à jour de la position du doigt
+    pointers.set(
+      e.pointerId,
+      {
+        x: e.clientX,
+        y: e.clientY
+      }
+    );
+
+
+    // =================================================
+    // UN DOIGT = DÉPLACEMENT
+    // =================================================
+
+    if (
+      pointers.size === 1 &&
+      dragStart
+    ) {
+
+      const p =
+        pointers.get(
+          e.pointerId
+        );
+
+
+      x +=
+        p.x -
+        dragStart.x;
+
+
+      y +=
+        p.y -
+        dragStart.y;
+
+
+      dragStart = {
+
+        x: p.x,
+        y: p.y
+
+      };
+
+
+      draw();
+
+      return;
+    }
+
+
+    // =================================================
+    // DEUX DOIGTS = ZOOM + DÉPLACEMENT
+    // =================================================
+
+    if (
+      pointers.size === 2 &&
+      pinchStart
+    ) {
+
+      const [
+        a,
+        b
+      ] =
+        [...pointers.values()];
+
+
+      const distance =
+        getDistance(a, b);
+
+
+      const center =
+        getCenter(a, b);
+
+
+      // Calcul du nouveau zoom
+      scale =
+        pinchStart.scale *
+        (
+          distance /
+          pinchStart.distance
+        );
+
+
+      // Limites du zoom
+      scale =
+        Math.max(
+          0.25,
+          Math.min(
+            5,
+            scale
+          )
+        );
+
+
+      // Déplacement de la carte
+      // pour garder le centre sous les doigts
+      x =
+        center.x -
+        pinchStart.worldX *
+        scale;
+
+
+      y =
+        center.y -
+        pinchStart.worldY *
+        scale;
+
+
+      draw();
+    }
+
+  },
+  {
+    passive: false
+  }
+);
+
+
+// =====================================================
+// FIN DU GESTE
+// =====================================================
+
+function endPointer(e) {
+
+  pointers.delete(
+    e.pointerId
+  );
+
+
+  // Plus aucun doigt
+  if (pointers.size === 0) {
+
+    dragStart = null;
+
+    pinchStart = null;
+
+    return;
+  }
+
+
+  // Si on passe de 2 doigts à 1
+  if (pointers.size === 1) {
+
+    const p =
+      [...pointers.values()][0];
+
+
+    dragStart = {
+
+      x: p.x,
+      y: p.y
+
+    };
+
+
+    pinchStart = null;
+  }
+}
+
+
+canvas.addEventListener(
+  'pointerup',
+  endPointer
+);
+
+
+canvas.addEventListener(
+  'pointercancel',
+  endPointer
+);
+
+
+// =====================================================
+// SOURIS — PC
+// =====================================================
+
+canvas.addEventListener(
+  'wheel',
+  function(e) {
+
+    e.preventDefault();
+
+    zoomAt(
+      e.deltaY < 0
+        ? 1.12
+        : 0.89,
+
+      e.clientX,
+      e.clientY
+    );
+
+  },
+  {
+    passive: false
+  }
+);
+
+
+// =====================================================
+// BOUTONS
+// =====================================================
+
+document
+  .getElementById('plus')
+  .onclick =
+    function() {
+
+      zoomAt(
+        1.2
+      );
+
+    };
+
+
+document
+  .getElementById('minus')
+  .onclick =
+    function() {
+
+      zoomAt(
+        0.833333
+      );
+
+    };
+
+
+document
+  .getElementById('reset')
+  .onclick =
+    reset;
+
+
+document
+  .getElementById('full')
+  .onclick =
+    function() {
+
+      if (
+        document.documentElement.requestFullscreen
+      ) {
+
+        document
+          .documentElement
+          .requestFullscreen();
+
+      }
+
+    };
+
+
+// =====================================================
+// CHARGEMENT DE LA CARTE
+// =====================================================
+
+img.onload =
+  function() {
+
+    draw();
+
+  };
+
+
+// =====================================================
+// INITIALISATION
+// =====================================================
+
+addEventListener(
+  'resize',
+  resize
+);
+
+resize();
+
+
+// Cache le message après quelques secondes
+setTimeout(
+  function() {
+
+    document
+      .getElementById('hint')
+      .style.display =
+        'none';
+
+  },
+  5000
+);
+
 </script>
+
 </body>
 </html>
