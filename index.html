@@ -1,213 +1,427 @@
 <!doctype html>
 <html lang="fr">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes,viewport-fit=cover">
 
-<title>MRP — POSTAL MAP</title>
+<head>
+
+<meta charset="utf-8">
+
+<meta name="viewport"
+content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+
+<title>MRP — Carte</title>
+
 
 <style>
-  html, body {
-    margin: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background: #111;
-    font-family: Arial, sans-serif;
-  }
 
-  #map {
-    display: block;
-    width: 100vw;
-    height: 100vh;
-    touch-action: none;
-    background: #fff;
-  }
+/* =====================================================
+   PAGE
+   ===================================================== */
 
-  #ui {
-    position: fixed;
-    right: 12px;
-    top: 12px;
-    display: flex;
-    gap: 8px;
-    z-index: 2;
-  }
+html,
+body {
 
-  button {
-    width: 44px;
-    height: 44px;
-    border: 0;
-    border-radius: 10px;
-    background: rgba(20, 20, 20, .82);
-    color: #fff;
-    font-size: 22px;
-    box-shadow: 0 2px 8px #0005;
-  }
+  margin: 0;
 
-  #hint {
-    position: fixed;
-    left: 50%;
-    bottom: 12px;
-    transform: translateX(-50%);
-    background: #111c;
-    color: #fff;
-    padding: 7px 11px;
-    border-radius: 9px;
-    font-size: 12px;
-    z-index: 2;
-    pointer-events: none;
-    white-space: nowrap;
-  }
+  width: 100%;
+  height: 100%;
+
+  overflow: hidden;
+
+  background: #111;
+
+  font-family: Arial, sans-serif;
+
+}
+
+
+/* =====================================================
+   CARTE
+   ===================================================== */
+
+#map {
+
+  display: block;
+
+  width: 100vw;
+  height: 100vh;
+
+  /* Empêche le navigateur d'interpréter
+     le doigt comme un scroll */
+
+  touch-action: none;
+
+  background: #fff;
+
+}
+
+
+/* =====================================================
+   BOUTONS
+   ===================================================== */
+
+#ui {
+
+  position: fixed;
+
+  right: 12px;
+  top: 12px;
+
+  display: flex;
+
+  gap: 8px;
+
+  z-index: 2;
+
+}
+
+
+button {
+
+  width: 44px;
+  height: 44px;
+
+  border: 0;
+
+  border-radius: 10px;
+
+  background: rgba(20,20,20,.82);
+
+  color: #fff;
+
+  font-size: 22px;
+
+  box-shadow: 0 2px 8px #0005;
+
+}
+
+
+/* =====================================================
+   MESSAGE
+   ===================================================== */
+
+#hint {
+
+  position: fixed;
+
+  left: 50%;
+
+  bottom: 12px;
+
+  transform: translateX(-50%);
+
+  background: #111c;
+
+  color: #fff;
+
+  padding: 7px 11px;
+
+  border-radius: 9px;
+
+  font-size: 12px;
+
+  z-index: 2;
+
+  pointer-events: none;
+
+  white-space: nowrap;
+
+}
+
 </style>
+
 </head>
+
 
 <body>
 
+
+<!-- =====================================================
+     CANVAS DE LA CARTE
+     ===================================================== -->
+
 <canvas id="map"></canvas>
 
+
+<!-- =====================================================
+     BOUTONS
+     ===================================================== -->
+
 <div id="ui">
+
   <button id="minus">−</button>
+
   <button id="plus">+</button>
+
   <button id="reset">↺</button>
+
   <button id="full">⛶</button>
+
 </div>
 
+
+<!-- =====================================================
+     MESSAGE
+     ===================================================== -->
+
 <div id="hint">
-  Glisse pour déplacer • pince pour zoomer
+
+  Glisse pour déplacer • Utilise + / − pour zoomer
+
 </div>
+
 
 <script>
 
-const canvas = document.getElementById('map');
-const ctx = canvas.getContext('2d');
+
+/* =====================================================
+   INITIALISATION
+   ===================================================== */
+
+const canvas =
+  document.getElementById('map');
+
+const ctx =
+  canvas.getContext('2d');
 
 
-// =====================================================
-// CARTE — même image que la version qui fonctionnait
-// =====================================================
+/* =====================================================
+   IMAGE DE LA CARTE
+   ===================================================== */
 
-const img = new Image();
+const img =
+  new Image();
+
+
+/*
+   Même image que celle utilisée
+   par la version qui fonctionnait.
+*/
 
 img.src =
   'https://s3.amazonaws.com/appforest_uf/f1496805493887x310323889600113000/Dispatch_Map_2.1.1.png';
 
 
-// =====================================================
-// VARIABLES
-// =====================================================
+/* =====================================================
+   VARIABLES
+   ===================================================== */
 
-let dpr = window.devicePixelRatio || 1;
+let dpr =
+  window.devicePixelRatio || 1;
+
+
+/*
+   Niveau de zoom.
+*/
 
 let scale = 1;
+
+
+/*
+   Position de la carte.
+*/
 
 let x = 0;
 let y = 0;
 
 
-// Gestion des doigts / souris
-let pointers = new Map();
+/*
+   Gestion du déplacement.
+*/
 
-let dragStart = null;
+let dragging = false;
 
-let pinchStart = null;
+let lx = 0;
+let ly = 0;
+
+let activePointer = null;
 
 
-// =====================================================
-// REDIMENSIONNEMENT
-// =====================================================
+/* =====================================================
+   REDIMENSIONNEMENT
+   ===================================================== */
 
 function resize() {
 
-  dpr = window.devicePixelRatio || 1;
+  dpr =
+    window.devicePixelRatio || 1;
 
-  canvas.width = innerWidth * dpr;
-  canvas.height = innerHeight * dpr;
 
-  canvas.style.width = innerWidth + 'px';
-  canvas.style.height = innerHeight + 'px';
+  canvas.width =
+    innerWidth * dpr;
+
+
+  canvas.height =
+    innerHeight * dpr;
+
+
+  canvas.style.width =
+    innerWidth + 'px';
+
+
+  canvas.style.height =
+    innerHeight + 'px';
+
 
   draw();
+
 }
 
 
-// =====================================================
-// AFFICHAGE DE LA CARTE
-// =====================================================
+/* =====================================================
+   AFFICHAGE DE LA CARTE
+   ===================================================== */
 
 function draw() {
 
+  /*
+     Configuration de la résolution
+     du canvas.
+  */
+
   ctx.setTransform(
+
     dpr,
     0,
     0,
     dpr,
     0,
     0
+
   );
+
+
+  /*
+     Nettoyage.
+  */
 
   ctx.clearRect(
+
     0,
     0,
+
     innerWidth,
     innerHeight
+
   );
 
-  if (!img.complete || !img.naturalWidth) {
+
+  /*
+     Si l'image n'est pas encore chargée,
+     on ne dessine rien.
+  */
+
+  if (
+    !img.complete ||
+    !img.naturalWidth
+  ) {
+
     return;
+
   }
+
 
   ctx.save();
 
-  // Position de la carte
-  ctx.translate(x, y);
 
-  // Zoom
-  ctx.scale(scale, scale);
+  /*
+     Déplacement de la carte.
+  */
 
-  // Position originale de la carte
-  ctx.drawImage(
-    img,
-    -1500,
-    -4000
+  ctx.translate(
+    x,
+    y
   );
 
+
+  /*
+     Zoom de la carte.
+  */
+
+  ctx.scale(
+    scale,
+    scale
+  );
+
+
+  /*
+     Position originale de la carte.
+  */
+
+  ctx.drawImage(
+
+    img,
+
+    -1500,
+    -4000
+
+  );
+
+
   ctx.restore();
+
 }
 
 
-// =====================================================
-// ZOOM AUTOUR D'UN POINT
-// =====================================================
+/* =====================================================
+   ZOOM
+   ===================================================== */
 
 function zoomAt(
+
   factor,
+
   cx = innerWidth / 2,
+
   cy = innerHeight / 2
+
 ) {
 
-  // Coordonnées de la carte sous le curseur/doigt
+
+  /*
+     Position de la carte
+     sous le point de zoom.
+  */
+
   const worldX =
     (cx - x) / scale;
+
 
   const worldY =
     (cy - y) / scale;
 
 
-  // Nouveau zoom
+  /*
+     Nouveau niveau de zoom.
+
+     Minimum : 0.25
+     Maximum : 5
+  */
+
   scale =
     Math.max(
+
       0.25,
+
       Math.min(
+
         5,
+
         scale * factor
+
       )
+
     );
 
 
-  // Garde le point sous le doigt
+  /*
+     On conserve le point
+     sous le centre de l'écran.
+  */
+
   x =
     cx -
     worldX * scale;
+
 
   y =
     cy -
@@ -215,12 +429,13 @@ function zoomAt(
 
 
   draw();
+
 }
 
 
-// =====================================================
-// RESET
-// =====================================================
+/* =====================================================
+   RESET
+   ===================================================== */
 
 function reset() {
 
@@ -230,372 +445,303 @@ function reset() {
   y = 0;
 
   draw();
+
 }
 
 
-// =====================================================
-// OUTILS POUR LE TOUCH
-// =====================================================
+/* =====================================================
+   DÉPLACEMENT
+   ===================================================== */
 
-function getDistance(a, b) {
+/*
+   Un seul doigt / curseur à la fois.
 
-  return Math.hypot(
-    a.clientX - b.clientX,
-    a.clientY - b.clientY
-  );
-}
+   IMPORTANT :
 
+   Il n'y a volontairement PAS de
+   pinch-to-zoom ici.
 
-function getCenter(a, b) {
+   Le zoom se fait uniquement
+   avec les boutons + et −.
+*/
 
-  return {
-
-    x:
-      (a.clientX + b.clientX) / 2,
-
-    y:
-      (a.clientY + b.clientY) / 2
-
-  };
-}
-
-
-// =====================================================
-// APPUI
-// =====================================================
 
 canvas.addEventListener(
+
   'pointerdown',
+
   function(e) {
 
-    e.preventDefault();
+
+    /*
+       Si un doigt/curseur est déjà actif,
+       on ignore les suivants.
+
+       Cela empêche deux doigts de
+       provoquer un comportement bizarre.
+    */
+
+    if (
+      activePointer !== null
+    ) {
+
+      return;
+
+    }
+
+
+    activePointer =
+      e.pointerId;
+
+
+    dragging = true;
+
+
+    lx =
+      e.clientX;
+
+
+    ly =
+      e.clientY;
+
+
+    /*
+       Garde le contrôle du doigt
+       même s'il sort légèrement
+       du canvas.
+    */
 
     canvas.setPointerCapture(
       e.pointerId
     );
 
 
-    // Enregistre le doigt / curseur
-    pointers.set(
-      e.pointerId,
-      {
-        x: e.clientX,
-        y: e.clientY
-      }
-    );
-
-
-    // -------------------------------------------------
-    // UN DOIGT
-    // -------------------------------------------------
-
-    if (pointers.size === 1) {
-
-      dragStart = {
-
-        x: e.clientX,
-        y: e.clientY
-
-      };
-
-      pinchStart = null;
-    }
-
-
-    // -------------------------------------------------
-    // DEUX DOIGTS
-    // -------------------------------------------------
-
-    if (pointers.size === 2) {
-
-      const [
-        a,
-        b
-      ] =
-        [...pointers.values()];
-
-
-      const center =
-        getCenter(a, b);
-
-
-      pinchStart = {
-
-        // Distance initiale entre les doigts
-        distance:
-          getDistance(a, b),
-
-        // Zoom initial
-        scale:
-          scale,
-
-        // Centre du geste
-        centerX:
-          center.x,
-
-        centerY:
-          center.y,
-
-        // Position de la carte sous le centre
-        worldX:
-          (center.x - x) / scale,
-
-        worldY:
-          (center.y - y) / scale
-
-      };
-
-
-      // On arrête le déplacement simple
-      dragStart = null;
-    }
-
-  },
-  {
-    passive: false
   }
+
 );
 
 
-// =====================================================
-// MOUVEMENT
-// =====================================================
+/* =====================================================
+   MOUVEMENT
+   ===================================================== */
 
 canvas.addEventListener(
+
   'pointermove',
+
   function(e) {
 
-    if (!pointers.has(e.pointerId)) {
+
+    /*
+       Ignore les autres doigts.
+    */
+
+    if (
+      e.pointerId !== activePointer
+    ) {
+
       return;
+
     }
+
+
+    if (!dragging) {
+
+      return;
+
+    }
+
 
     e.preventDefault();
 
 
-    // Mise à jour de la position du doigt
-    pointers.set(
-      e.pointerId,
-      {
-        x: e.clientX,
-        y: e.clientY
-      }
-    );
+    /*
+       Calcule le déplacement.
+    */
+
+    const dx =
+      e.clientX - lx;
 
 
-    // =================================================
-    // UN DOIGT = DÉPLACEMENT
-    // =================================================
-
-    if (
-      pointers.size === 1 &&
-      dragStart
-    ) {
-
-      const p =
-        pointers.get(
-          e.pointerId
-        );
+    const dy =
+      e.clientY - ly;
 
 
-      x +=
-        p.x -
-        dragStart.x;
+    /*
+       Déplace la carte.
+    */
+
+    x += dx;
+
+    y += dy;
 
 
-      y +=
-        p.y -
-        dragStart.y;
+    /*
+       Nouvelle position
+       de référence.
+    */
+
+    lx =
+      e.clientX;
 
 
-      dragStart = {
-
-        x: p.x,
-        y: p.y
-
-      };
+    ly =
+      e.clientY;
 
 
-      draw();
+    /*
+       Redessine.
+    */
 
-      return;
-    }
-
-
-    // =================================================
-    // DEUX DOIGTS = ZOOM + DÉPLACEMENT
-    // =================================================
-
-    if (
-      pointers.size === 2 &&
-      pinchStart
-    ) {
-
-      const [
-        a,
-        b
-      ] =
-        [...pointers.values()];
-
-
-      const distance =
-        getDistance(a, b);
-
-
-      const center =
-        getCenter(a, b);
-
-
-      // Calcul du nouveau zoom
-      scale =
-        pinchStart.scale *
-        (
-          distance /
-          pinchStart.distance
-        );
-
-
-      // Limites du zoom
-      scale =
-        Math.max(
-          0.25,
-          Math.min(
-            5,
-            scale
-          )
-        );
-
-
-      // Déplacement de la carte
-      // pour garder le centre sous les doigts
-      x =
-        center.x -
-        pinchStart.worldX *
-        scale;
-
-
-      y =
-        center.y -
-        pinchStart.worldY *
-        scale;
-
-
-      draw();
-    }
+    draw();
 
   },
+
   {
     passive: false
   }
+
 );
 
 
-// =====================================================
-// FIN DU GESTE
-// =====================================================
-
-function endPointer(e) {
-
-  pointers.delete(
-    e.pointerId
-  );
-
-
-  // Plus aucun doigt
-  if (pointers.size === 0) {
-
-    dragStart = null;
-
-    pinchStart = null;
-
-    return;
-  }
-
-
-  // Si on passe de 2 doigts à 1
-  if (pointers.size === 1) {
-
-    const p =
-      [...pointers.values()][0];
-
-
-    dragStart = {
-
-      x: p.x,
-      y: p.y
-
-    };
-
-
-    pinchStart = null;
-  }
-}
-
+/* =====================================================
+   FIN DU DÉPLACEMENT
+   ===================================================== */
 
 canvas.addEventListener(
+
   'pointerup',
-  endPointer
+
+  function(e) {
+
+
+    if (
+      e.pointerId !== activePointer
+    ) {
+
+      return;
+
+    }
+
+
+    dragging = false;
+
+    activePointer = null;
+
+  }
+
 );
 
 
 canvas.addEventListener(
+
   'pointercancel',
-  endPointer
+
+  function(e) {
+
+
+    if (
+      e.pointerId !== activePointer
+    ) {
+
+      return;
+
+    }
+
+
+    dragging = false;
+
+    activePointer = null;
+
+  }
+
 );
 
 
-// =====================================================
-// SOURIS — PC
-// =====================================================
+/* =====================================================
+   SOURIS — ZOOM AVEC MOLETTE
+   ===================================================== */
+
+/*
+   Sur PC, la molette permet toujours
+   de zoomer.
+
+   Sur téléphone, le zoom se fait
+   uniquement avec + et −.
+*/
 
 canvas.addEventListener(
+
   'wheel',
+
   function(e) {
 
     e.preventDefault();
+
 
     zoomAt(
+
       e.deltaY < 0
         ? 1.12
         : 0.89,
 
       e.clientX,
       e.clientY
+
     );
 
   },
+
   {
     passive: false
   }
+
 );
 
 
-// =====================================================
-// BOUTONS
-// =====================================================
+/* =====================================================
+   BOUTON +
+   ===================================================== */
 
 document
   .getElementById('plus')
-  .onclick =
-    function() {
+  .onclick = function() {
 
-      zoomAt(
-        1.2
-      );
+    zoomAt(
 
-    };
+      1.2,
 
+      innerWidth / 2,
+      innerHeight / 2
+
+    );
+
+  };
+
+
+/* =====================================================
+   BOUTON −
+   ===================================================== */
 
 document
   .getElementById('minus')
-  .onclick =
-    function() {
+  .onclick = function() {
 
-      zoomAt(
-        0.833333
-      );
+    zoomAt(
 
-    };
+      0.833333,
 
+      innerWidth / 2,
+      innerHeight / 2
+
+    );
+
+  };
+
+
+/* =====================================================
+   BOUTON RESET
+   ===================================================== */
 
 document
   .getElementById('reset')
@@ -603,50 +749,61 @@ document
     reset;
 
 
+/* =====================================================
+   PLEIN ÉCRAN
+   ===================================================== */
+
 document
   .getElementById('full')
-  .onclick =
-    function() {
-
-      if (
-        document.documentElement.requestFullscreen
-      ) {
-
-        document
-          .documentElement
-          .requestFullscreen();
-
-      }
-
-    };
+  .onclick = function() {
 
 
-// =====================================================
-// CHARGEMENT DE LA CARTE
-// =====================================================
+    if (
+      document.documentElement.requestFullscreen
+    ) {
 
-img.onload =
-  function() {
+      document
+        .documentElement
+        .requestFullscreen();
 
-    draw();
+    }
 
   };
 
 
-// =====================================================
-// INITIALISATION
-// =====================================================
+/* =====================================================
+   CHARGEMENT DE L'IMAGE
+   ===================================================== */
+
+img.onload = function() {
+
+  draw();
+
+};
+
+
+/* =====================================================
+   INITIALISATION
+   ===================================================== */
 
 addEventListener(
+
   'resize',
+
   resize
+
 );
+
 
 resize();
 
 
-// Cache le message après quelques secondes
+/* =====================================================
+   CACHE LE MESSAGE
+   ===================================================== */
+
 setTimeout(
+
   function() {
 
     document
@@ -655,10 +812,13 @@ setTimeout(
         'none';
 
   },
+
   5000
+
 );
 
 </script>
 
 </body>
+
 </html>
