@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>NCRP — Carte</title>
+<style>
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;font-family:Arial,sans-serif}
+  #map{display:block;width:100vw;height:100vh;touch-action:none;background:#fff}
+  #ui{position:fixed;right:12px;top:12px;display:flex;gap:8px;z-index:2}
+  button{width:44px;height:44px;border:0;border-radius:10px;background:rgba(20,20,20,.82);color:#fff;font-size:22px;box-shadow:0 2px 8px #0005}
+  #hint{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);background:#111c;color:#fff;padding:7px 11px;border-radius:9px;font-size:12px;z-index:2;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<div id="ui">
+  <button id="minus">−</button><button id="plus">+</button><button id="reset">↺</button><button id="full">⛶</button>
+</div>
+<div id="hint">Glisse pour déplacer • pince pour zoomer</div>
+<script>
+const canvas=document.getElementById('map'),ctx=canvas.getContext('2d');
+const img=new Image();
+img.src='https://s3.amazonaws.com/appforest_uf/f1496805493887x310323889600113000/Dispatch_Map_2.1.1.png';
+
+let dpr=window.devicePixelRatio||1, scale=1, x=0, y=0;
+let lastDist=null, dragging=false, lx=0, ly=0;
+
+function resize(){
+  dpr=window.devicePixelRatio||1;
+  canvas.width=innerWidth*dpr; canvas.height=innerHeight*dpr;
+  canvas.style.width=innerWidth+'px'; canvas.style.height=innerHeight+'px';
+  draw();
+}
+function draw(){
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,innerWidth,innerHeight);
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.scale(scale,scale);
+  ctx.drawImage(img,-1500,-4000);
+  ctx.restore();
+}
+function zoomAt(f,cx=innerWidth/2,cy=innerHeight/2){
+  const wx=(cx-x)/scale, wy=(cy-y)/scale;
+  scale=Math.max(.25,Math.min(5,scale*f));
+  x=cx-wx*scale; y=cy-wy*scale; draw();
+}
+function reset(){scale=1;x=0;y=0;draw()}
+
+canvas.addEventListener('pointerdown',e=>{
+  canvas.setPointerCapture(e.pointerId); dragging=true; lx=e.clientX; ly=e.clientY;
+});
+canvas.addEventListener('pointermove',e=>{
+  if(!dragging||e.pointerType==='touch'&&canvas.getPointerCapture()==null)return;
+  x+=e.clientX-lx; y+=e.clientY-ly; lx=e.clientX; ly=e.clientY; draw();
+});
+canvas.addEventListener('pointerup',()=>dragging=false);
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoomAt(e.deltaY<0?1.12:.89,e.clientX,e.clientY)},{passive:false});
+
+canvas.addEventListener('touchstart',e=>{
+  if(e.touches.length===2){
+    dragging=false;
+    lastDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+  }
+},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+  if(e.touches.length===2){
+    e.preventDefault();
+    const a=e.touches[0],b=e.touches[1];
+    const dist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+    if(lastDist){zoomAt(dist/lastDist,(a.clientX+b.clientX)/2,(a.clientY+b.clientY)/2)}
+    lastDist=dist;
+  }
+},{passive:false});
+canvas.addEventListener('touchend',()=>lastDist=null);
+
+document.getElementById('plus').onclick=()=>zoomAt(1.2);
+document.getElementById('minus').onclick=()=>zoomAt(.833333);
+document.getElementById('reset').onclick=reset;
+document.getElementById('full').onclick=()=>document.documentElement.requestFullscreen?.();
+img.onload=draw; addEventListener('resize',resize); resize();
+setTimeout(()=>document.getElementById('hint').style.display='none',5000);
+</script>
+</body>
+</html>
